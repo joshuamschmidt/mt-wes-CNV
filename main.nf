@@ -18,27 +18,45 @@ Channel
     .map{ row-> tuple(row.sample_id, file(row.input_cram), file(row.input_crai)) }
     .set { coverageInChannel }
 
-process cramCoverage {
-    publishDir "$params.outdir/CoverageSummary", pattern: "*.summary.txt"
+process cramCounts {
+    publishDir "$params.outdir/CoverageCounts", pattern: "*.summary.txt"
 
     label 'bamTasks'
 
     input:
-    set sample_id, file(input_cram), file(input_crai) from coverageInChannel
+    set sample_id, path(input_cram), path(input_crai) from coverageInChannel
 
     output:
-    file "*regions.bed.gz" into coverageOutChannel
-    file "${sample_id}.mosdepth.summary.txt" into coverageSummaryChannel
+    file "*.cpt.bed.gz" into countsOutChannel
 
     script:
     """
     cp $reference_fasta_index .
-    mosdepth --fasta $reference_fasta \
-    --by $regions_bed \
-    --no-per-base \
+    hts_nim_tools count-reads \
+    --fasta $reference_fasta \
     --mapq 25 \
     --threads $task.cpus \
-    $sample_id \
-    $input_cram
+    $regions_bed $input_cram \
+    | sort -k1,1 -k2,2n \
+    | gzip > "$sample_id".cpt.bed.gz
+    """
+}
+
+process estimateMTcn {
+    publishDir "$params.outdir/CombinedCov/", pattern: "*MT-DNA-CN*"
+
+    label 'combineTasks'
+
+    input:
+    file input_files from coverageOutChannel.collect()
+
+    output:
+    file "${batch}.coverage.bed.gz"
+
+    script:
+    """
+    relativeMT_cn.py $input_files \
+    --suffix ".regions.bed.gz" \
+    | gzip > "$batch".MT-DNA-CN.txt.gz
     """
 }
