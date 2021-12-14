@@ -12,3 +12,5 @@ bedtools makewindows -g hg38-main.chrom.sizes -w 20000 > hg38.20kb.windows.bed
 # remove windows with any gap and any target
 awk 'BEGIN {OFS="\t";} {chr=$1; start=$2-10000; end=$3+10000;} { print chr, start, end}' Agilent_V5_targets.bed > Agilent_V5_targets.up10kb.bed
 bedtools intersect -v -a hg38.20kb.windows.bed -b Agilent_V5_targets.up10kb.bed hg38.gaps.bed > hg38.20kb.windows-offtarget.bed
+
+rm hg38.chrom.sizes && rm hg38-main.chrom.sizes && rm hg38.20kb.windows.bed && rm hg38.agp && rm hg38.gaps.bed && rm Agilent_V5_targets.up10kb.bed
