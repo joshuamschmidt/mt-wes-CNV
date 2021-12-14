@@ -48,69 +48,46 @@ parser.set_defaults(file_suffix=".mosdepth.summary.txt")
 
 optional.add_argument('--threads', type=int, dest='threads',
                        help='multithreaded mode with int threads:NOT IMPLEMENTED')
-
 optional.add_argument('--out', type=argparse.FileType('w'),
                        dest='out_file',
                        help='output file (or stdout if not set)',
                        default=sys.stdout)
 
 # '''class for counts/coverage files'''
-# '''class for counts/coverage files'''
 class Counts():
-    def __init__(self, files, count_column: int, file_suffix: str):
+    def __init__(self, files, file_suffix: str):
         self.files = files
         self.file_suffix = file_suffix
-        self.count_column = count_column
         self.n_files = len(self.files)
-        self.sample_names = []
-        self.n_rows = None
-        self.first_key=None
-        self.get_n_rows()
-        self.count_array = np.empty([self.n_rows,self.n_files], dtype=np.int64)
-        self.fill_count_array()
-        #self.sample_names = [file.removesuffix(file_suffix) for file in self.files]
-
-    def get_n_rows(self):
-        file=self.files[0]
-        first_fileDF=pd.read_csv(file, sep='\t',header=None)
-        lines = len(first_fileDF.index)
-        self.n_rows = lines
-
-    def fill_count_array(self):
-        count_index = self.count_column - 1
+        self.sample_info_list = []
+        self.fill_sample_info_list()
+    def fill_sample_info_list(self):
         for i, file in enumerate(self.files):
-            countDF = pd.read_csv(file, sep='\t',header=None)
-            count_array=countDF.iloc[:,count_index].values
-            #check dtype of count file. change type of self.count_array
-            if i==0:
-                self.count_array = self.count_array.astype(count_array.dtype)
-                self.first_key = str(countDF.iloc[0,0]) + "_" + str(countDF.iloc[0,1])
-            assert self.n_rows == np.size(count_array), f"File {file} has an unexpected number of rows. Expected {self.n_rows}. Observed {np.size(count_array)}"
-            self.count_array[:,i] = count_array
-            self.sample_names.append(file.removesuffix(self.file_suffix))
-
-    def convert_to_fkpm(self,bedObject):
-        assert self.first_key == bedObject.first_key, f"count files are not sorted in the same order as the bed file. File key: {self.first_key}, Bed key: {bedObject.first_key}"
-        assert self.n_rows == bedObject.n_rows, f"count files and bed file differ in nummber of features. File: {self.n_rows}, Bed: {bedObject.n_rows}"
-        perM_scaling_factors = self.count_array.sum(axis=0) / 1e6
-        fpm_scaled_count_array = self.count_array / perM_scaling_factors
-        fpkm_array = np.array(fpm_scaled_count_array / bedObject.kb_lengths[:,None])
-        self.count_array = fpkm_array
-
-    def array_to_df(self):
-        self.count_array = pd.DataFrame(self.count_array)
-        self.count_array.columns = self.sample_names
-
-    def append_bed(self, bed):
-       assert isinstance(self.count_array, pd.DataFrame), "you need to convert to DF before this! (array_to_df)"
-       self.count_array = pd.concat([bed.bed_data,self.count_array],axis=1)
-
+            sample_name = file.removesuffix(file_suffix)
+            countDF = pd.read_csv(file, sep='\t',header=None,names= ["chr", "start","end", "annotation", "counts"], index_col=False)
+            total_reads = countDF['counts'].sum()
+            scaling_factor = total_reads / 1e6
+            countDF['width'] = (countDF['end'] - countDF['start']) / 1000
+            countDF['scaled_counts'] = countDF['counts'] / scaling_factor
+            countDF['fkpm'] = countDF['scaled_counts'] / countDF['width']
+            fpkm_by_chr_annotation = countDF.groupby(['chr', 'annotation'])['fkpm'].mean().reset_index()
+            autosome_target_fkpm = fpkm_by_chr_annotation[((fpkm_by_chr_annotation['chr']!="chrY") & (fpkm_by_chr_annotation['chr']!="chrX") & (fpkm_by_chr_annotation['chr']!="chrM") & (fpkm_by_chr_annotation['annotation']=="T"))]['fkpm'].values
+            autosome_off_target_fkpm = fpkm_by_chr_annotation[((fpkm_by_chr_annotation['chr']!="chrY") & (fpkm_by_chr_annotation['chr']!="chrX") & (fpkm_by_chr_annotation['chr']!="chrM") & (fpkm_by_chr_annotation['annotation']=="O"))]['fkpm'].values
+            mt_fkpm = fpkm_by_chr_annotation[fpkm_by_chr_annotation['chr']=="chrM"]['fkpm'].values
+            CN_ratio_target_mean = np.mean(mt_fkpm / autosome_target_fkpm)
+            CN_ratio_off_target_mean = np.mean(mt_fkpm / autosome_off_target_fkpm)
+            CN_ratio_target_sd = np.std(mt_fkpm / autosome_target_fkpm)
+            CN_ratio_off_target_sd = np.std(mt_fkpm / autosome_off_target_fkpm)
+            mean_autosomal_target_fkpm = np.mean(autosome_target_fkpm)
+            sample_list = [sample_name, mt_fkpm[0], mean_autosomal_target_fkpm, CN_ratio_target_mean,CN_ratio_target_sd, CN_ratio_off_target_mean, CN_ratio_off_target_sd, total_reads]
+            self.sample_info_list.append(sample_list)
+        self.sampleDF=pd.DataFrame(self.sample_info_list,columns= ["sample_id", "mtFKPM","autosomalFKPM", "CN_ratio_target","CN_ratio_target_sd", "CN_ratio_off_target","CN_ratio_off_target_sd","total_reads"])
 
 def main():
     args = parser.parse_args()
     assert all(args.file_suffix in file for file in args.files), "files have different suffixes"
-    samples = coverageSummaries(args.files, file_suffix=args.file_suffix)
-    samples.summaries.to_csv(path_or_buf=args.out_file, sep='\t', encoding='utf-8',index=False, float_format='%3f',header=True)
+    samples = Counts(args.files, file_suffix=args.file_suffix)
+    samples.sampleDF.to_csv(path_or_buf=args.out_file, sep='\t', encoding='utf-8',index=False, float_format='%3f',header=True)
 
 if __name__ == '__main__':
     main()
