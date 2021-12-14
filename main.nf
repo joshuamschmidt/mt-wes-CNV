@@ -56,7 +56,7 @@ process estimateMTcn {
     script:
     """
     relativeMT_cn.py $input_files \
-    --suffix ".regions.bed.gz" \
+    --suffix ".cpt.bed.gz" \
     | gzip > "$batch".MT-DNA-CN.txt.gz
     """
 }

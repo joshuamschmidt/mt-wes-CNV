@@ -63,7 +63,7 @@ class Counts():
         self.fill_sample_info_list()
     def fill_sample_info_list(self):
         for i, file in enumerate(self.files):
-            sample_name = file.removesuffix(file_suffix)
+            sample_name = file.removesuffix(self.file_suffix)
             countDF = pd.read_csv(file, sep='\t',header=None,names= ["chr", "start","end", "annotation", "counts"], index_col=False)
             total_reads = countDF['counts'].sum()
             scaling_factor = total_reads / 1e6
