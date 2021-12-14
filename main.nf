@@ -16,7 +16,7 @@ Channel
     .fromPath(params.inputFile)
     .splitCsv(header:true, sep:'\t')
     .map{ row-> tuple(row.sample_id, file(row.input_cram), file(row.input_crai)) }
-    .set { coverageInChannel }
+    .set { cramCountsInChannel }
 
 process cramCounts {
     publishDir "$params.outdir/CoverageCounts", pattern: "*.summary.txt"
@@ -24,10 +24,10 @@ process cramCounts {
     label 'bamTasks'
 
     input:
-    set sample_id, path(input_cram), path(input_crai) from coverageInChannel
+    set sample_id, path(input_cram), path(input_crai) from cramCountsInChannel
 
     output:
-    file "*.cpt.bed.gz" into countsOutChannel
+    file "*.cpt.bed.gz" into estimateMTcnInChannel
 
     script:
     """
@@ -48,7 +48,7 @@ process estimateMTcn {
     label 'combineTasks'
 
     input:
-    file input_files from coverageOutChannel.collect()
+    file input_files from estimateMTcnInChannel.collect()
 
     output:
     file "${batch}.coverage.bed.gz"
