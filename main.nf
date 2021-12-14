@@ -51,7 +51,7 @@ process estimateMTcn {
     file input_files from estimateMTcnInChannel.collect()
 
     output:
-    file "${batch}.coverage.bed.gz"
+    file "${batch}.MT-DNA-CN.txt.gz"
 
     script:
     """
