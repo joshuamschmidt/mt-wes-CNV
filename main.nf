@@ -19,7 +19,7 @@ Channel
     .set { cramCountsInChannel }
 
 process cramCounts {
-    publishDir "$params.outdir/CoverageCounts", pattern: "*.summary.txt"
+    publishDir "$params.outdir/CoverageCounts", pattern: "*.cpt.bed.gz"
 
     label 'bamTasks'
 
